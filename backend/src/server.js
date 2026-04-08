@@ -71,11 +71,21 @@ if (allowedOrigins.length > 0) {
         ) {
           return cb(null, true);
         }
+        // production: allow same-site Render domains by default
+        if (
+          process.env.NODE_ENV === "production" &&
+          /^https?:\/\/[a-z0-9-]+\.onrender\.com$/i.test(origin)
+        ) {
+          return cb(null, true);
+        }
         if (allowedOrigins.includes(origin)) return cb(null, true);
         return cb(new Error(`CORS blocked origin: ${origin}`));
       },
     }),
   );
+} else if (process.env.NODE_ENV !== "production") {
+  // dev fallback if user didn't set CORS_ORIGIN
+  app.use(cors({ origin: true }));
 }
 
 app.use("/api/tasks", taskRoute);
