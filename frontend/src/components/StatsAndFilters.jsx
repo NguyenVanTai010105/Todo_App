@@ -3,6 +3,7 @@ import { Badge } from "./ui/badge";
 import { FilterType } from "@/lib/data";
 import { Filter } from "lucide-react";
 import { Button } from "./ui/button";
+import { cn } from "@/lib/utils";
 
 const StatsAndFilters = ({
   completedTasksCount = 0,
@@ -35,7 +36,12 @@ const StatsAndFilters = ({
             key={type}
             variant={filter === type ? "gradient" : "ghost"}
             size="sm"
-            className="capitalize"
+            className={cn(
+              "cursor-pointer capitalize transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-sm",
+              filter !== type && "hover:bg-primary/10 hover:text-primary",
+              filter === type &&
+                "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
+            )}
             onClick={() => setFilter(type)}
           >
             <Filter className="size-4" />

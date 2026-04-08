@@ -4,36 +4,55 @@ export const getAllTasks = async (req, res) => {
   const { filter = "today" } = req.query;
   const now = new Date();
   let startDate;
+  let endDate;
 
   switch (filter) {
     case "today": {
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 2025-08-24 00:00
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       break;
     }
     case "week": {
       const mondayDate =
         now.getDate() - (now.getDay() - 1) - (now.getDay() === 0 ? 7 : 0);
       startDate = new Date(now.getFullYear(), now.getMonth(), mondayDate);
+      endDate = new Date(now.getFullYear(), now.getMonth(), mondayDate + 7);
       break;
     }
     case "month": {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       break;
     }
     case "all":
     default: {
       startDate = null;
+      endDate = null;
     }
   }
 
-  const query = startDate ? { createdAt: { $gte: startDate } } : {};
+  // Lọc theo lịch hẹn (dueAt). Nếu task chưa có dueAt thì fallback createdAt để không "biến mất" task cũ.
+  const dateMatch =
+    startDate && endDate
+      ? {
+          $or: [
+            { dueAt: { $gte: startDate, $lt: endDate } },
+            { dueAt: null, createdAt: { $gte: startDate, $lt: endDate } },
+          ],
+        }
+      : {};
+
+  const query = {
+    user: req.user._id,
+    ...dateMatch,
+  };
 
   try {
     const result = await Task.aggregate([
       { $match: query },
       {
         $facet: {
-          tasks: [{ $sort: { createdAt: -1 } }],
+          tasks: [{ $sort: { isImportant: -1, createdAt: -1 } }],
           activeCount: [{ $match: { status: "active" } }, { $count: "count" }],
           completeCount: [
             { $match: { status: "complete" } },
@@ -56,8 +75,14 @@ export const getAllTasks = async (req, res) => {
 
 export const createTask = async (req, res) => {
   try {
-    const { title } = req.body;
-    const task = new Task({ title });
+    const { title, dueAt, note, isImportant } = req.body;
+    const task = new Task({
+      title,
+      user: req.user._id,
+      dueAt: dueAt ? new Date(dueAt) : null,
+      note: typeof note === "string" ? note : "",
+      isImportant: Boolean(isImportant),
+    });
 
     const newTask = await task.save();
     res.status(201).json(newTask);
@@ -69,13 +94,18 @@ export const createTask = async (req, res) => {
 
 export const updateTask = async (req, res) => {
   try {
-    const { title, status, completedAt } = req.body;
-    const updatedTask = await Task.findByIdAndUpdate(
-      req.params.id,
+    const { title, status, completedAt, dueAt, note, isImportant } = req.body;
+    const updatedTask = await Task.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
       {
         title,
         status,
         completedAt,
+        ...(dueAt !== undefined
+          ? { dueAt: dueAt ? new Date(dueAt) : null }
+          : {}),
+        ...(note !== undefined ? { note: typeof note === "string" ? note : "" } : {}),
+        ...(isImportant !== undefined ? { isImportant: Boolean(isImportant) } : {}),
       },
       { new: true },
     );
@@ -93,7 +123,10 @@ export const updateTask = async (req, res) => {
 
 export const deleteTask = async (req, res) => {
   try {
-    const deleteTask = await Task.findByIdAndDelete(req.params.id);
+    const deleteTask = await Task.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id,
+    });
 
     if (!deleteTask) {
       return res.status(404).json({ message: "Nhiệm vụ không tồn tại" });
