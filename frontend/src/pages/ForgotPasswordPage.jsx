@@ -69,7 +69,7 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-md p-6 mx-auto space-y-6">
           <div className="space-y-2 text-center">
             <h1 className="text-4xl font-bold text-transparent bg-primary bg-clip-text">
-              TodoX
+              ToDoApp
             </h1>
             <p className="text-muted-foreground">Quên mật khẩu</p>
           </div>

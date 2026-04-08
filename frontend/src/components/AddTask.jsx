@@ -44,7 +44,7 @@ const AddTask = ({ handleNewTaskAdded }) => {
   };
 
   return (
-    <Card className="p-6 border-0 bg-gradient-card shadow-custom-lg">
+    <Card className="p-6 border-0 bg-gradient-card shadow-custom-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-custom-lg">
       <div className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Input
@@ -66,7 +66,7 @@ const AddTask = ({ handleNewTaskAdded }) => {
           <Button
             variant="gradient"
             size="xl"
-            className="h-11 px-6 sm:shrink-0"
+            className="h-11 px-6 sm:shrink-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-md"
             onClick={addTask}
             disabled={!newTaskTitle.trim()}
           >

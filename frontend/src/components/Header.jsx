@@ -38,9 +38,23 @@ export const Header = () => {
       </div>
 
       <div className="text-sm text-muted-foreground">
-        <Link className="hover:underline" to="/">
-          Trang chủ
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link className="hover:underline" to="/">
+            Trang chủ
+          </Link>
+          <span className="text-muted-foreground/60">•</span>
+          <Link className="hover:underline" to="/history">
+            Lịch sử
+          </Link>
+          <span className="text-muted-foreground/60">•</span>
+          <Link className="hover:underline" to="/chat">
+            Chat
+          </Link>
+          <span className="text-muted-foreground/60">•</span>
+          <Link className="hover:underline" to="/stats">
+            Thống kê
+          </Link>
+        </div>
       </div>
     </div>
   );

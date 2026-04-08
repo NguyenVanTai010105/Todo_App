@@ -5,7 +5,7 @@ import { Header } from "@/components/Header";
 import StatsAndFilters from "@/components/StatsAndFilters";
 import TaskList from "@/components/TaskList";
 import TaskListPagination from "@/components/TaskListPagination";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import api from "@/lib/axios";
 import { visibleTaskLimit } from "@/lib/data";
@@ -35,9 +35,22 @@ const HomePage = () => {
     Math.ceil(filteredTasks.length / visibleTaskLimit) || 1,
   );
 
+  // logic
+  const fetchTasks = useCallback(async () => {
+    try {
+      const res = await api.get(`/tasks?filter=${dateQuery}`);
+      setTaskBuffer(res.data.tasks);
+      setActiveTaskCount(res.data.activeCount);
+      setCompleteTaskCount(res.data.completeCount);
+    } catch (error) {
+      console.error("Lỗi xảy ra khi truy xuất tasks:", error);
+      toast.error("Lỗi xảy ra khi truy xuất tasks.");
+    }
+  }, [dateQuery]);
+
   useEffect(() => {
     fetchTasks();
-  }, [dateQuery]);
+  }, [fetchTasks]);
 
   useEffect(() => {
     // Mỗi khi filter hoặc dateQuery thay đổi, quay về trang đầu tiên
@@ -51,19 +64,6 @@ const HomePage = () => {
       setPage(totalPages);
     }
   }, [page, totalPages]);
-
-  // logic
-  const fetchTasks = async () => {
-    try {
-      const res = await api.get(`/tasks?filter=${dateQuery}`);
-      setTaskBuffer(res.data.tasks);
-      setActiveTaskCount(res.data.activeCount);
-      setCompleteTaskCount(res.data.completeCount);
-    } catch (error) {
-      console.error("Lỗi xảy ra khi truy xuất tasks:", error);
-      toast.error("Lỗi xảy ra khi truy xuất tasks.");
-    }
-  };
 
   const handleTaskChanged = () => {
     fetchTasks();

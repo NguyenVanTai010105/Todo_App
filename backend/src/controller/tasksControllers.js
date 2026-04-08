@@ -1,4 +1,21 @@
 import Task from "../models/Task.js";
+import Activity from "../models/Activity.js";
+
+function toSnapshot(task) {
+  if (!task) return null;
+  const obj = typeof task.toObject === "function" ? task.toObject() : task;
+  return {
+    _id: obj._id,
+    title: obj.title,
+    note: obj.note,
+    dueAt: obj.dueAt,
+    status: obj.status,
+    completedAt: obj.completedAt,
+    isImportant: obj.isImportant,
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+  };
+}
 
 export const getAllTasks = async (req, res) => {
   const { filter = "today" } = req.query;
@@ -85,6 +102,13 @@ export const createTask = async (req, res) => {
     });
 
     const newTask = await task.save();
+    await Activity.create({
+      user: req.user._id,
+      entityType: "task",
+      entityId: newTask._id,
+      action: "create",
+      snapshot: toSnapshot(newTask),
+    });
     res.status(201).json(newTask);
   } catch (error) {
     console.error("Lỗi khi gọi createTask", error);
@@ -95,24 +119,53 @@ export const createTask = async (req, res) => {
 export const updateTask = async (req, res) => {
   try {
     const { title, status, completedAt, dueAt, note, isImportant } = req.body;
+
+    const before = await Task.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+    if (!before) {
+      return res.status(404).json({ message: "Nhiệm vụ không tồn tại" });
+    }
+
+    const updateDoc = {
+      ...(title !== undefined ? { title } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(completedAt !== undefined ? { completedAt } : {}),
+      ...(dueAt !== undefined ? { dueAt: dueAt ? new Date(dueAt) : null } : {}),
+      ...(note !== undefined ? { note: typeof note === "string" ? note : "" } : {}),
+      ...(isImportant !== undefined ? { isImportant: Boolean(isImportant) } : {}),
+    };
+
     const updatedTask = await Task.findOneAndUpdate(
       { _id: req.params.id, user: req.user._id },
-      {
-        title,
-        status,
-        completedAt,
-        ...(dueAt !== undefined
-          ? { dueAt: dueAt ? new Date(dueAt) : null }
-          : {}),
-        ...(note !== undefined ? { note: typeof note === "string" ? note : "" } : {}),
-        ...(isImportant !== undefined ? { isImportant: Boolean(isImportant) } : {}),
-      },
+      updateDoc,
       { new: true },
     );
 
     if (!updatedTask) {
       return res.status(404).json({ message: "Nhiệm vụ không tồn tại" });
     }
+
+    let action = "update";
+    if (before.status !== updatedTask.status) {
+      if (updatedTask.status === "complete") action = "complete";
+      if (updatedTask.status === "active") action = "uncomplete";
+    }
+
+    const changes = {};
+    for (const k of Object.keys(updateDoc)) {
+      changes[k] = { from: before[k], to: updatedTask[k] };
+    }
+
+    await Activity.create({
+      user: req.user._id,
+      entityType: "task",
+      entityId: updatedTask._id,
+      action,
+      snapshot: toSnapshot(updatedTask),
+      changes,
+    });
 
     res.status(200).json(updatedTask);
   } catch (error) {
@@ -123,16 +176,26 @@ export const updateTask = async (req, res) => {
 
 export const deleteTask = async (req, res) => {
   try {
-    const deleteTask = await Task.findOneAndDelete({
+    const task = await Task.findOne({
       _id: req.params.id,
       user: req.user._id,
     });
 
-    if (!deleteTask) {
+    if (!task) {
       return res.status(404).json({ message: "Nhiệm vụ không tồn tại" });
     }
 
-    res.status(200).json(deleteTask);
+    await Task.deleteOne({ _id: task._id, user: req.user._id });
+
+    await Activity.create({
+      user: req.user._id,
+      entityType: "task",
+      entityId: task._id,
+      action: "delete",
+      snapshot: toSnapshot(task),
+    });
+
+    res.status(200).json(task);
   } catch (error) {
     console.error("Lỗi khi gọi deleteTask", error);
     res.status(500).json({ message: "Lỗi hệ thống" });
