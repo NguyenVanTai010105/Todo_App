@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 dotenv.config();
 
@@ -16,7 +17,27 @@ const PORT = process.env.PORT || 5001;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..", "..");
-const frontendDistPath = path.join(projectRoot, "frontend", "dist");
+
+function resolveFrontendDistPath() {
+  const candidates = [
+    // repo root layout
+    path.join(projectRoot, "frontend", "dist"),
+    // if server started from backend/ as cwd
+    path.resolve(process.cwd(), "..", "frontend", "dist"),
+    // some deployments build dist at root
+    path.join(projectRoot, "dist"),
+  ];
+
+  for (const p of candidates) {
+    if (fs.existsSync(path.join(p, "index.html"))) return p;
+  }
+
+  // fallback to default candidate for debugging/health endpoint
+  return candidates[0];
+}
+
+const frontendDistPath = resolveFrontendDistPath();
+const frontendIndexPath = path.join(frontendDistPath, "index.html");
 
 const app = express();
 
@@ -63,11 +84,37 @@ app.use("/api/activities", activitiesRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/stats", statsRoutes);
 
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(frontendDistPath));
+app.get("/api/health", (req, res) => {
+  const distExists = fs.existsSync(frontendDistPath);
+  const indexExists = fs.existsSync(frontendIndexPath);
+  let distFiles = [];
+  try {
+    if (distExists) distFiles = fs.readdirSync(frontendDistPath).slice(0, 50);
+  } catch {
+    distFiles = [];
+  }
+  res.status(200).json({
+    ok: true,
+    nodeEnv: process.env.NODE_ENV,
+    cwd: process.cwd(),
+    frontendDistPath,
+    distExists,
+    indexExists,
+    distFiles,
+  });
+});
 
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(frontendDistPath, "index.html"));
+if (process.env.NODE_ENV === "production") {
+  // Serve static assets; don't auto-serve index.html here
+  app.use(express.static(frontendDistPath, { index: false }));
+
+  // SPA fallback: only for non-API routes without file extensions
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) return next();
+    if (/\.[a-z0-9]+$/i.test(req.path)) {
+      return res.status(404).end();
+    }
+    return res.sendFile(frontendIndexPath);
   });
 }
 
