@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext.jsx";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import SocialAuthSection from "@/components/SocialAuthSection.jsx";
 
 export default function RegisterPage() {
   const { isAuthed, register } = useAuth();
@@ -98,6 +99,14 @@ export default function RegisterPage() {
                 {submitting ? "Đang tạo..." : "Đăng ký"}
               </Button>
             </form>
+
+            <SocialAuthSection
+              disabled={submitting}
+              onSuccess={() => {
+                toast.success("Đăng nhập thành công");
+                navigate("/", { replace: true });
+              }}
+            />
           </Card>
 
           <p className="text-sm text-center text-muted-foreground">

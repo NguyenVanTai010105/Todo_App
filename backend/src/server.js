@@ -4,6 +4,8 @@ import authRoutes from "./routes/authRoutes.js";
 import activitiesRoutes from "./routes/activitiesRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import statsRoutes from "./routes/statsRoutes.js";
+import billingRoutes from "./routes/billingRoutes.js";
+import { stripeWebhook } from "./controller/billingController.js";
 import { connectDB } from "./config/db.js";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -40,6 +42,12 @@ const frontendDistPath = resolveFrontendDistPath();
 const frontendIndexPath = path.join(frontendDistPath, "index.html");
 
 const app = express();
+
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhook,
+);
 
 // middlewares
 app.use(express.json());
@@ -92,6 +100,7 @@ app.use("/api/tasks", taskRoute);
 app.use("/api/auth", authRoutes);
 app.use("/api/activities", activitiesRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/billing", billingRoutes);
 app.use("/api/stats", statsRoutes);
 
 app.get("/api/health", (req, res) => {

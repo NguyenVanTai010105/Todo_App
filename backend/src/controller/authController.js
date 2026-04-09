@@ -1,8 +1,93 @@
 import bcrypt from "bcryptjs";
+import { OAuth2Client } from "google-auth-library";
 import User from "../models/User.js";
 import { signToken } from "../utils/jwt.js";
 import PasswordResetOtp from "../models/PasswordResetOtp.js";
 import { sendPasswordResetOtpEmail } from "../utils/mailer.js";
+
+function publicUser(doc) {
+  return {
+    _id: doc._id,
+    name: doc.name,
+    email: doc.email,
+    chatPaid: Boolean(doc.chatPaid),
+  };
+}
+
+function normalizeDisplayName(name) {
+  let n = String(name || "").trim();
+  if (n.length < 2) n = "Người dùng";
+  if (n.length > 50) n = n.slice(0, 50);
+  return n;
+}
+
+async function upsertSocialUser({ email, name, googleSub }) {
+  const normalizedEmail = String(email).toLowerCase().trim();
+  const displayName = normalizeDisplayName(name);
+
+  if (googleSub) {
+    const byGoogle = await User.findOne({ googleSub });
+    if (byGoogle) {
+      if (byGoogle.name !== displayName || byGoogle.email !== normalizedEmail) {
+        byGoogle.name = displayName;
+        byGoogle.email = normalizedEmail;
+        await byGoogle.save();
+      }
+      return byGoogle;
+    }
+  }
+
+  const byEmail = await User.findOne({ email: normalizedEmail });
+  if (byEmail) {
+    let changed = false;
+    if (googleSub && !byEmail.googleSub) {
+      byEmail.googleSub = googleSub;
+      changed = true;
+    }
+    if (byEmail.name !== displayName) {
+      byEmail.name = displayName;
+      changed = true;
+    }
+    if (changed) await byEmail.save();
+    return byEmail;
+  }
+
+  return User.create({
+    name: displayName,
+    email: normalizedEmail,
+    ...(googleSub ? { googleSub } : {}),
+  });
+}
+
+async function verifyGoogleIdToken(idToken) {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    const err = new Error("GOOGLE_CLIENT_ID chưa cấu hình");
+    err.status = 503;
+    throw err;
+  }
+  const client = new OAuth2Client(clientId);
+  const ticket = await client.verifyIdToken({
+    idToken: String(idToken),
+    audience: clientId,
+  });
+  const payload = ticket.getPayload();
+  if (!payload?.sub || !payload.email) {
+    const err = new Error("Token Google không hợp lệ");
+    err.status = 401;
+    throw err;
+  }
+  if (payload.email_verified === false) {
+    const err = new Error("Email Google chưa được xác minh");
+    err.status = 401;
+    throw err;
+  }
+  return {
+    sub: payload.sub,
+    email: String(payload.email).toLowerCase(),
+    name: payload.name || payload.email?.split("@")[0] || "Người dùng",
+  };
+}
 
 export const register = async (req, res) => {
   try {
@@ -30,7 +115,7 @@ export const register = async (req, res) => {
     const token = signToken(user._id);
     return res.status(201).json({
       token,
-      user: { _id: user._id, name: user.name, email: user.email },
+      user: publicUser(user),
     });
   } catch (error) {
     console.error("Lỗi register:", error);
@@ -46,10 +131,16 @@ export const login = async (req, res) => {
     }
 
     const user = await User.findOne({ email: String(email).toLowerCase() }).select(
-      "_id name email passwordHash",
+      "_id name email passwordHash chatPaid",
     );
     if (!user) {
       return res.status(401).json({ message: "Sai email hoặc mật khẩu" });
+    }
+
+    if (!user.passwordHash) {
+      return res.status(401).json({
+        message: "Tài khoản này đăng nhập bằng Google",
+      });
     }
 
     const ok = await bcrypt.compare(String(password), user.passwordHash);
@@ -60,7 +151,7 @@ export const login = async (req, res) => {
     const token = signToken(user._id);
     return res.status(200).json({
       token,
-      user: { _id: user._id, name: user.name, email: user.email },
+      user: publicUser(user),
     });
   } catch (error) {
     console.error("Lỗi login:", error);
@@ -69,7 +160,33 @@ export const login = async (req, res) => {
 };
 
 export const me = async (req, res) => {
-  return res.status(200).json({ user: req.user });
+  return res.status(200).json({ user: publicUser(req.user) });
+};
+
+export const googleAuth = async (req, res) => {
+  try {
+    const { idToken } = req.body || {};
+    if (!idToken) {
+      return res.status(400).json({ message: "Thiếu idToken" });
+    }
+    const profile = await verifyGoogleIdToken(idToken);
+    const user = await upsertSocialUser({
+      email: profile.email,
+      name: profile.name,
+      googleSub: profile.sub,
+    });
+    const token = signToken(user._id);
+    return res.status(200).json({
+      token,
+      user: publicUser(user),
+    });
+  } catch (error) {
+    const status = error.status || 500;
+    if (status >= 500) console.error("Lỗi googleAuth:", error);
+    return res.status(status).json({
+      message: error.message || "Lỗi đăng nhập Google",
+    });
+  }
 };
 
 function generateOtp6() {

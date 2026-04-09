@@ -19,8 +19,20 @@ const userSchema = new mongoose.Schema(
     },
     passwordHash: {
       type: String,
-      required: true,
+      required: false,
       select: false,
+    },
+    googleSub: {
+      type: String,
+      sparse: true,
+      unique: true,
+    },
+    chatPaid: {
+      type: Boolean,
+      default: false,
+    },
+    chatPaidAt: {
+      type: Date,
     },
   },
   { timestamps: true },

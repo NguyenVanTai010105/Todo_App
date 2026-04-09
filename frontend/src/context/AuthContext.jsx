@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import api from "@/lib/axios";
 
 const AuthContext = createContext(null);
@@ -40,12 +47,19 @@ export function AuthProvider({ children }) {
     };
   }, [token]);
 
+  const refreshUser = useCallback(async () => {
+    const res = await api.get("/auth/me");
+    setUser(res.data.user);
+    return res.data.user;
+  }, []);
+
   const value = useMemo(() => {
     return {
       token,
       user,
       loading,
       isAuthed: Boolean(token && user),
+      refreshUser,
       async login({ email, password }) {
         const res = await api.post("/auth/login", { email, password });
         localStorage.setItem(TOKEN_KEY, res.data.token);
@@ -60,13 +74,20 @@ export function AuthProvider({ children }) {
         setUser(res.data.user);
         return res.data.user;
       },
+      async loginWithGoogle(idToken) {
+        const res = await api.post("/auth/google", { idToken });
+        localStorage.setItem(TOKEN_KEY, res.data.token);
+        setToken(res.data.token);
+        setUser(res.data.user);
+        return res.data.user;
+      },
       logout() {
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
         setUser(null);
       },
     };
-  }, [token, user, loading]);
+  }, [token, user, loading, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -5,8 +5,12 @@ import api from "@/lib/axios";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/context/AuthContext.jsx";
+import ChatPaywall from "@/components/ChatPaywall.jsx";
 
 export default function ChatPage() {
+  const { user } = useAuth();
+  const [billing, setBilling] = useState(null);
   const [messages, setMessages] = useState([
     { role: "assistant", text: "Chào bạn! Bạn muốn mình giúp gì trong TodoX?" },
   ]);
@@ -15,11 +19,27 @@ export default function ChatPage() {
   const bottomRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/billing/info")
+      .then((r) => {
+        if (!cancelled) setBilling(r.data);
+      })
+      .catch(() => {
+        if (!cancelled) setBilling(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canUseChat = Boolean(billing?.paywallDisabled || user?.chatPaid);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
   const history = useMemo(() => {
-    // send last messages to backend
     return messages
       .slice(-10)
       .map((m) => ({ role: m.role === "assistant" ? "model" : "user", text: m.text }));
@@ -27,6 +47,7 @@ export default function ChatPage() {
 
   const send = async (e) => {
     e?.preventDefault?.();
+    if (!canUseChat) return;
     const msg = text.trim();
     if (!msg || sending) return;
 
@@ -38,15 +59,22 @@ export default function ChatPage() {
       const reply = res.data.reply || "Mình chưa có câu trả lời.";
       setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
     } catch (err) {
-      toast.error(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Không kết nối được server (CORS/Network)",
-      );
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: "Có lỗi khi gửi tin nhắn. Thử lại giúp mình nhé." },
-      ]);
+      const code = err?.response?.data?.code;
+      if (code === "CHAT_PAYMENT_REQUIRED" || err?.response?.status === 402) {
+        toast.error("Cần thanh toán để dùng chat.");
+        setMessages((prev) => prev.slice(0, -1));
+        setText(msg);
+      } else {
+        toast.error(
+          err?.response?.data?.message ||
+            err?.message ||
+            "Không kết nối được server (CORS/Network)",
+        );
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: "Có lỗi khi gửi tin nhắn. Thử lại giúp mình nhé." },
+        ]);
+      }
     } finally {
       setSending(false);
     }
@@ -75,48 +103,55 @@ export default function ChatPage() {
           </div>
 
           <Card className="border-0 bg-gradient-card shadow-custom-md">
-            <div className="p-4 h-[55vh] overflow-auto space-y-3">
-              {messages.map((m, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={
-                      m.role === "user"
-                        ? "max-w-[85%] rounded-2xl px-3 py-2 text-sm bg-primary text-primary-foreground shadow"
-                        : "max-w-[85%] rounded-2xl px-3 py-2 text-sm bg-white/60 text-foreground shadow"
-                    }
-                  >
-                    {m.text}
-                  </div>
+            {canUseChat ? (
+              <>
+                <div className="p-4 h-[55vh] overflow-auto space-y-3">
+                  {messages.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={
+                          m.role === "user"
+                            ? "max-w-[85%] rounded-2xl px-3 py-2 text-sm bg-primary text-primary-foreground shadow"
+                            : "max-w-[85%] rounded-2xl px-3 py-2 text-sm bg-white/60 text-foreground shadow"
+                        }
+                      >
+                        {m.text}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={bottomRef} />
                 </div>
-              ))}
-              <div ref={bottomRef} />
-            </div>
 
-            <div className="border-t bg-muted/30 p-3">
-              <form onSubmit={send} className="flex gap-2">
-                <Input
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Nhập tin nhắn..."
-                  className="bg-slate-50"
-                />
-                <Button
-                  type="submit"
-                  variant="gradient"
-                  disabled={sending || !text.trim()}
-                  className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-                >
-                  {sending ? "Đang gửi..." : "Gửi"}
-                </Button>
-              </form>
-            </div>
+                <div className="border-t bg-muted/30 p-3">
+                  <form onSubmit={send} className="flex gap-2">
+                    <Input
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      placeholder="Nhập tin nhắn..."
+                      className="bg-slate-50"
+                    />
+                    <Button
+                      type="submit"
+                      variant="gradient"
+                      disabled={sending || !text.trim()}
+                      className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                    >
+                      {sending ? "Đang gửi..." : "Gửi"}
+                    </Button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="p-6">
+                <ChatPaywall />
+              </div>
+            )}
           </Card>
         </div>
       </div>
     </div>
   );
 }
-

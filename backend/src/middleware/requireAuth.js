@@ -19,7 +19,7 @@ export default async function requireAuth(req, res, next) {
     const userId = payload?.sub;
     if (!userId) return res.status(401).json({ message: "Token không hợp lệ" });
 
-    const user = await User.findById(userId).select("_id name email");
+    const user = await User.findById(userId).select("_id name email chatPaid");
     if (!user) return res.status(401).json({ message: "User không tồn tại" });
 
     req.user = user;

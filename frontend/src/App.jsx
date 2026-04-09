@@ -8,6 +8,8 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HistoryPage from "./pages/HistoryPage";
 import ChatPage from "./pages/ChatPage";
 import StatsPage from "./pages/StatsPage";
+import PaymentSuccessPage from "./pages/PaymentSuccessPage.jsx";
+import PaymentCancelPage from "./pages/PaymentCancelPage.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import ChatWidget from "./components/ChatWidget";
 
@@ -30,6 +32,17 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route
+            path="/payment/thanh-cong"
+            element={
+              loading ? null : isAuthed ? (
+                <PaymentSuccessPage />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route path="/payment/huy" element={<PaymentCancelPage />} />
           <Route
             path="/history"
             element={
